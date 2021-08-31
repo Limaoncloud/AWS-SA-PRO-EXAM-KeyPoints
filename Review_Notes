@@ -1,0 +1,861 @@
+Review notes
+
+*Networking:*
+
+*VPC and subnet*:
+
+NAT: translate private IPV4 to public ip. NOT IPV6
+static NAT: IGW — to 1 public fixed ip
+dynamic NAT:  maybe private IPV4 share a public IP  (NAT GW) use port
+
+subnet splitting : /16 →2 */17  (the next position split to 0 or 1)
+
+/16 prefix (10.16.0.0/16 :10.16.0.0 - 10.16.255.255)
+/16 split to 2 (10.16.0.0/16→ 10.16.0.0/17, 10.16.128.0/17)
+
+VPC sharing: account that owns the VPC (owner) shares one or more subnets with other accounts (participants) that belong to the same organization from AWS Organizations. After a subnet is shared, the participants can view, create, modify, and delete their application resources in the subnets shared with them. Participants cannot view, modify, or delete resources that belong to other participants or the VPC owner. Interconnect VPCs using private link, TGW and VPC peering.
+
+
+After you’ve created your VPC, you further expand your network by associating one to utmost 4 secondary CIDR blocks to your VPC.
+The first four IP addresses and the last IP address in each subnet CIDR block are not available for you to use, and cannot be assigned to an instance. 
+
+*Private link:*
+
+private link, VPC endpoint, Interface endpoint.... 
+Private link -  interface endpoint (SG+ NACL) + privatelink → access private services, resource in another vpc /aws marketplace secure networking
+Interface endpoint: not HA. Need to one in every AZ for HA
+Private link doesnt support IPV6. Only Ipv4+TCP
+can use private DNS
+
+VPC peering: private traffic across multiple VPCs.
+
+VPC GW endpoint- — to 1 VPC, regional HA
+private access to S3 and DDB
+one per region. same region as s3/ddb
+HA over AZs in a region
+Associate to subnets by *prefix to route table*
+Doenst add to specific subnects
+Prevent leaky Bucket  — S3 set private , only access through VPC GW endpint
+use NAT GW — private EC2 will have access to internet.
+Endpoint policy
+A *VPC endpoint policy* is an IAM resource policy that you attach to an endpoint when you create or modify the endpoint. controlling access from the endpoint to the specified service (eg S3). 
+
+To allow users to perform S3 actions on the bucket from the VPC endpoints or IP addresses, you must explicitly allow the user-level permissions (IAM role)
+Create a _VPC endpoint policy_ that restricts access to the specific Amazon S3 bucket. Create an _IAM role_ that grants access to the S3 bucket and attach it to the application EC2 instances. Apply an _Amazon S3 bucket policy_ that only allows access from the VPC endpoint and those using the IAM role. This ensures that traffic to the S3 bucket are all coming from the VPC endpoint and that the application EC2 instances are the only ones allowed to access it. 
+
+*Interface Endpoint*
+
+private access to all public services, except ddb
+not HA , as an ENI added to each subnet in each AZ(has a private IP and DNS name). subject to AZ failure, needs to be in every AZ for HA
+
+can use SG
+TCP and IPV4 only
+use private link
+Provides a new service endpint DNS (translate to private ip)
+DNS name xxx.vpce.amazonaws.com, can use regional DNS, or zonal DNS or Private DNS
+Private instance → interface endpoint  DNS name→ private link → PUBLIc services
+private DNS overwrites default DNS, allowed unmodified application
+
+*site to site VPN:*
+
+quickest way to set up (less than an hour), can start with VPN then DX, it is not private but encrypted
+2 IPSEC tunnels
+encrypted connection between *VPC* and on premise network
+HA
+VGW - on VPC (HA by region)- there can be only 1 VGW per VPC
+CGW (can be single point of failure as single physical router) —HA need multiple HW in different builidings, multiple CGW
+Static VPN : simple but no Load balancing and fail over to another connection
+Dynamic VPC/BGP: Multiple vpn →HA and traffic distribution, route propagation
+VPN and VGW speed limits 1.25Gbps
+Latency public internet, data cap on premise
+VPN can run over a *public VIF* of DX
+*Accelerated site to site VPN:* vpn over public internet from CGW global accelerator edge locations then private network to TGW. Not VGW
+lower latency, less jitter and higher throughput
+fixed accelerator fee+transfer fee
+
+*SSL VPN:*
+
+SSL VPN allows users from any Internet-enabled location to launch a web browser to establish remote-access VPN connections, cost effective for business travelers and remote employees. 
+
+Establish an SSL VPN solution in a public subnet of your VPC. Install and configure SSL VPN client software on all the workstations/laptops of the users who need access to the ERP system. Create a private subnet in your VPC and place your application servers behind it.
+
+*Transit GW:*
+
+connect VPCs to on premise
+work with VPN /direct connect
+HA regional
+can peer TGW to cross account/ cross regions ---global network
+support transitive routing
+
+*Route 53:*
+
+two services: Register Domains  and Host zone files (DB of DNS infor of a domain)  on manage servers (4)
+global service and global resilience
+hosted zone can be public or Private (for sensitive infor) linked to VPCs, host DNS records
+Route53 resolver : answer DNS request for EC2 in the VPC and private hosted zone record. reserved ip address with VPC ip +2 eg. 10.0.0/16 →10.0.0.2, contain end point to answer DNS request to/from on premise env. 
+Use forwarding rules to integrate Route53 resolver and DNS resolver on ( another peered vpc, on premise network connected to AWS). Resolver Endpoint (for hybrid, reduce DNS forwarders) are regional , works with multi vpcs. Inbound endpint: DNS resolver on your network forward DNS queries to Routte53, resolve domain name for AWS resources. Outbound endpiont: Route53 resolver forward queries to resolvers on your network.
+public hosted zone : access from public internet and VPC (VPC+2 address as DNS resolver)
+private hosted zone: only accessible in *associated* VPCs ( VPC use.2 resolver address. VPC must associate with private hostedzone) to associate private hosted zone with VPCs with a different account VPC: 
+
+1. Using the account that created the hosted zone, authorize the association of the VPC with the private hosted zone by using one of the following methods: (cant use console)
+
+    * AWS CLI – using the create-vpc-association-authorization in the AWS CLI
+    * AWS SDK or AWS Tools for Windows PowerShell
+    * Amazon Route 53 API – Using the CreateVPCAssociationAuthorization API
+
+Note the following:
+– If you want to associate multiple VPCs that you created with one account with a hosted zone that you created with a different account, you must submit one authorization request for each VPC.
+– When you authorize the association, you must specify the hosted zone ID, so the private hosted zone must already exist.
+– You can’t use the Route 53 console either to authorize the association of a VPC with a private hosted zone or to make the association.
+
+1. Using the account that created the VPC, associate the VPC with the hosted zone. As with authorizing the association, you can use the AWS SDK, Tools for Windows PowerShell, the AWS CLI, or the Route 53 API. Modify VPC attributes enableDnsHostnames and enableDnsSupport as both true
+
+split view: public hosted zone and private hosted zone use same zone name, but different records
+DNS records: NameServer (NS), A and AAAA (Host to IP , A to ipv4, AAAA map to ipv6), CNAME (Host to host, map name to name, multi task to one host) , MX records(email, find a mail server), TXT records (text data to approve domain ownership)
+Alias: maps name to AWS reources (ELB), FREE.  use as default. Should be same type (A/CNAME) as the record pointing at (naked apex doesnt work in CNAME. eg. abc.com. www.abc.com (http://www.abc.com/) work for CNAME)
+*For EC2 instances, always use a Type A Record without an Alias. For ELB, Cloudfront and S3, always use a Type A Record with an Alias and finally, for RDS, always use the CNAME Record with no Alias.*
+
+Route53 routing policy: multi value answer (useful for health check and returns healthy ips), failover,lantency, geo-proximity, weighted...)
+
+
+DNS record TTL —cached on resolver . change DNS, lower TTL to avoid issues
+healthchecks:  globally checkers , over public internet. health check over healthy of web server,  status of other health checks , or cloudwatch alarms. 
+route 53 routing: simple(random route to 1 service, doesnt support health check) , failover (active/ passive fail over), multi-value (return multiple healthy),, weighted routing (simple LB or test new software version), latency base routing (optimise user experience and performance) and geo location routing (doesnt return closest record only relevant location records)
+
+Route 53 DNSSEC signining:data origin authentication and data integrity verification for DNS and can help customers meet compliance mandates, such as FedRAMP. DNS queries- → lead to fake website
+
+
+*Direct Connect*: 
+
+1GBPS/10GBPS 
+From AWS to direct connect locations - days, from DX location to on premise- weeks/months (no HA, one physical cable)
+VIF: 
+private VIF (VPC VGW, DX GW) , public VIF (public AWS services, not public internet)
+transit VIF
+from partner — hosted connection , 1 VIF/ hosted VIF,shared bandwith
+No encryption, public VIF+site2site VPN
+
+(Encrypt over DX: Using the current Direct Connect connection, create a new public virtual interface, and input the network prefixes that you want to advertise. Create a new site-to-site VPN connection to the VPC with the BGP protocol using the DX connection. Configure the employees’ laptops to connect to this VPN.*)*
+no sharing internet data cap and bandwith, no transit over internet (low and consistent latency), cheaper data transfer and faster speeds
+DX LAG : multiple physical connection as one : speed *n, active/active architecture. all connectiosn need to have same speed and terminate at same location
+DX GW: connect multi VPC(virtual private gw) of different regions over direct connect
+
+
+
+Database: 
+
+*DynamoDB:*
+
+primary key needs to unique (partition key or partition key+ sortkey)
+capacity (speed): on demand, provisioned. RCU (4KB read per second) WCU(1KB write per second) - per region or per table
+Query : - only query on one  PK /PK+SK. 
+More cost efficient to retrieve as much data from one query 
+Scan : expensive as consume all items
+Indexes: alternative views on table
+LSI: different SK, must be created with Table , shares RCU and wcu on the table
+
+GSI : differnet PK+SK, can be created any time, have own RCU, WCU, always eventual consistent
+
+Dynamodb stream: time ordered lst of item changes. view types: keys only, new image, old_image, new_and_old_images
+Global table: multi region, multi active DB, Automatically replicate across regions
+No limit on DDB table size with item<=440kb. For large item >440kb, can store them as an object in Amazon S3 and then store the object identifier in your DynamoDB item.
+Dynamodb autoscaling: automate capacity for tables and global secondary index
+
+*RDS*:
+
+*RTO*: recovery time
+*RPO*:acceptable data loss time
+RDS database backup to S3
+When automatic failover occurs, your application can remain unaware of what’s happening behind the scenes. The CNAME record for your DB instance will be altered to point to the newly promoted standby.
+Amazon RDS does not support certain features in Oracle such as Multitenant Database, Real Application Clusters (RAC), Unified Auditing, Database Vault, and many more.
+scale up or down result in brief down time. 
+RDS Backups: 
+
+* Your DB instance must be in the ACTIVE state for backups to occur.
+* Automated backups and automated snapshots do not occur while a copy is executing in the same Region for the same DB instance.
+* The first snapshot of a DB instance contains the data of the full DB instance.
+* The snapshots taken after the first snapshot are incremental snapshots. This means that only the latest changed data is captured and saved.
+* If it’s a Multi-AZ configuration, backups occur on the standby to reduce impact on the primary.
+* both automated and manual backup store in S3. Automated back up will be auto deleted after retention period. Manual snapshot must be manually deleted
+* when delete DB instance, can choose to retain automated backups
+* Copy snapshot in or across region
+* Share snapshot across account: automated snapshots cant be shared, needs to take a manual copy of it and share the manual snapshots
+* Cant restore a db snapshot with existing DB, need to launch a new instance. cant restore from an encrypted DB snapshot. Take a copy than restore from the copy.
+* Read replica can be for DR , as can be  in another region and can be promoted to standby. (Replica lag: time behind source)
+
+RDS encryption:You can only enable encryption for an Amazon RDS DB instance when you create it, not after the DB instance is created. 
+You can create a snapshot of your unencrypted DB instance, and then create an encrypted copy of that snapshot. You can then restore a DB instance from the encrypted snapshot.
+
+*Aurora :*
+
+Global database : single mastered, Aurora global database consists of one primary AWS Region where your data is mastered, and up to five read-only secondary AWS Regions. You issue write operations directly to the primary DB cluster in the primary AWS Region. Aurora replicates data to the secondary AWS Regions using dedicated infrastructure, with latency typically under a second. 
+multi -mastered database: in same AWS region, cant enable cross region replication
+Aurora have singer reader endpoint for read replicas. RDS doesnt support
+
+*Migration:*
+
+https://quip-amazon.com/oeJ4A4QE1Xdd
+
+Application Discover service: 
+
+Agentless: for VM ware (only get performance and usage)
+Agent based: more in VM data (eg. network. processs....)
+
+Server migration service: 
+
+vm→s3→AMI
+Agentless, integrate with vmware, hyper-v, Azure VM, on live volumns
+
+VM import /export : legacy, manual and down time, do not support incremental
+SMS incrementally replicate server VMs as AMIs, minimise down time, orchestrate multi server migration
+AWS SMS supports up to 16TB volumes so you can use it to migrate the data volumes as well.
+
+Database migration service: 
+
+*NO* DOWN TIME
+one end must be on AWS, target can be DB on EC2 or RDS, source can be a DB engine or S3 or redshift
+can be same type of different type of DB engines. 
+Full load or CDC
+Schema conversion Tool (SCT) : for DB of different types OR DB to S3
+use SCT agent to extract data from your on-premises data warehouse and migrate it to Amazon Redshift or extract data from Apache Cassandra to DynamoDB
+
+
+DataSync:
+
+online data transfer, keeps metadata and buildin data validation
+install datasync agent
+online data transfer service that simplifies, automates, and accelerates copying large amounts of data to and from AWS storage services over the internet or AWS Direct Connect.
+use DataSync agent,Agents need to be activated first using an activation key
+DataSync ensures that your data arrives intact by performing integrity checks both in transit and at rest. 
+
+Datasync vs Snowball:
+WS DataSync is ideal for online data transfers. AWS Snowball/ Snowball Edge is suitable for offline data transfers, for customers who are bandwidth constrained
+
+Storage gateway: 
+
+Volume GW: 
+Two modes: 
+Stored mode - all stored on premise , S3 for back up . *Low latency*, great for full disk backup/DR. But doesnt improve DC storage capacity
+stored mode data stored in on-premise storage hw and back up to S3 as EBS snapshot. Restore snapshot as storage gateway volume or as an EBS volume.
+
+Cache mode - cache on premise, primary data on S3. Use for datacenter extension ,capacity issue
+Gateway-Cached volumes can support volumes of 1,024TB in size, whereas Gateway-stored volume supports volumes of 512 TB size.
+
+Tape-VTL GW: —mostly for archive
+virtual tape on premise, local cache, archive on S3/Glacier
+On premise app can connect to TapeGW use ISCSI device
+
+File GW: 
+S3 as primary data , on premise NFS/SMB local read/write cache
+Doesnt support object locking
+integrate with microsoft active directory
+
+Storage Gateway uses Challenge-Handshake Authentication Protocol (CHAP) to authenticate iSCSI and initiator connections.
+
+Snow family:
+
+snow ball: 
+*10TB-10PB,* only storage, can use multi devices to multi sites
+Snowball edge:
+with compute, faster data processing on ingestion
+Snowmobile: 
+>10PB and single location
+
+Way to improve snowball performance from largest to smallest positive impact on performance:
+
+1. Perform multiple write operations at one time 
+2. Transfer small files in batches 
+3. Write from multiple computers 
+4. Don’t perform other operations on files during transfer 
+5. Reduce local network use 
+6. Eliminate unnecessary hops 
+
+S3 sync :
+
+The most effective choice here is to use the S3 sync feature that is available in AWS CLI. In this way, you can comfortably synchronize the data in your on-premises server and in AWS a week before the migration. And on Friday, just do another sync to complete the task. Remember that the sync feature of S3 only uploads the “delta” or in other words, the “difference” in the subset. Therefore, it will only take just a fraction of the time to complete the data synchronization compared to the other methods.
+
+Compute:
+
+*EC2:*
+
+one primary ENI with the instance cant be removed. only moved after instance terminated
+can add /detach secondary ENI  as long as in same AZ. Multi ENI offer better security as can have different SG in different subnets. sg attached to ENI not the instance
+
+IP address — to ENI not the instance
+ENI has >=IPV6 address (public routable), 1 MAC address, >=1 SG per ENI
+ENI perform SRC/DST Check — use for security appliance
+migrate software license (MAC) to secondary ENI
+1 public IPV4 address 
+
+Elastic public ip ---- 1 primary private IPV4 on ENI. can be moved around ENI or instances. Belong to the acccount level
+Elastic IP is charged when not associating with instance or instance not running. You can have one Elastic IP (EIP) address associated with a running instance at no charge
+
+EC2 Placement groups: cluster (close together in one AZ, low latency, HPC), partition(group instances in partitions. one partition on same HW, for distributed and replicated workloaded. such as Hadoop, cassandra and kafka); Spread (distrinct HW, for failure prevention)
+instance metadata vs user data:
+metadata: data about your instance that you can use to configure or manage the running instance (eg. iam role, ami, host name, security group, ip address)
+user data : specified when launching instance (eg. parameters, simple script.., must be base64-encoded) user data doesnt run if you stop and start the instance
+An instance profile is a container for an IAM role that you can use to pass role information to an EC2 instance when the instance starts. there is no InstanceRoleName property in IAM.
+
+*Load Balancer:* 
+
+Each ELB is configed with A record DNS name pointing at 1+ nodes per AZ
+internet facing  ( ELB nodes have public IPs. Internet facing LB nodes can access public and private EC2 instances ) or internal ELB (only private ips). 
+EC2 doeesnt need to be pulic to work with a LB. Public LB can work with both public and private EC2 Instances
+, require 8+ free ips ,per subnet >=/28 subnet size (16-5 free ips)
+cross zone LB: allows distributes instances across AZs -  fix uneven distributed load
+LB evolution: CLB (default not use, 1ssl per CLB), ALB (layer 7, HTTP/S/websocket, 1SSL per listener rule), NLB(TCP, TLS, UDP, and non http/s, such as SMTP, SSH, gaming,.. no cookies, no session stickness, )
+ALB doenst support other Layer 7 protocols (eg. smtp, ssh, gaming), no tcp/udp/tls listener. SSL/TLS terminated at ALB. Then a new connection from ALB to application. No unbroken . SSL end2end.
+ALB must have SSL cert if use HTTPs
+add SG to load balancer
+terminate SSL at ELB, so  no SSL cert in EC2 and developers wont have access to in EC2. also reduce load to EC2.
+health check : Each health check will be executed at configured intervals to all the EC2 instances so if the health check query page involves a database query, there will be several simultaneous queries to the database. This can increase the load of your database. Change LB health check to a simple HTML page instead of page queries DB. 
+
+
+Session state:
+server side infor, persist your interaction with the application. stored on a server or externally (stateless)(better)
+session stickness (for state stored on a server): — can cause uneven load. 
+Class LB: on LB
+ALB: per target group
+cookie: AWSALB for application load balancer, locks device to a single instance in a duration
+change backend instance if cooking expire or instance falure
+lister rules —> action
+NLB can have static ips, useful for whitelisting. Unbroken encryption. use with private link.  also fastest lantency
+
+
+With ALB SNI support we’re making it easy to use more than one certificate with the same ALB. The most common reason you might want to use multiple certificates is to handle different domains with the same load balancer. all you need to do is bind multiple certificates to the same secure listener on your load balancer. ALB will automatically choose the optimal TLS certificate for each client.It’s always been possible to use wildcard and subject-alternate-name (SAN) certificates with ALB, but these come with limitations. Wildcard certificates only work for related subdomains that match a simple pattern and while SAN certificates can support many different domains, the same certificate authority has to authenticate each one. That means you have reauthenticate and reprovision your certificate everytime you add a new domain.
+
+Autoscaling:
+
+Dynamic scaling:
+Target tracking policies - based on a metric target value (eg. avg CPU utiliseation/requestCountPerTarget for ALB)
+step and simple scaling - proportionally scale out—require cloudwatch alarm. In most cases, step scaling is better than simple scaling policy. Simple scaling has cooldown period before respond to another alarm, cant scale.
+scaling based on SQS queque size
+an autoscaling group cant be over two regions, same for ALB 
+
+
+Caching, Delivery and Edge
+
+*Cloudfront*
+
+origin:S3 or custom (have a public ip). Only custom origin uses regional edge cache.
+Distribution: configuration unit — has unique domain name (CNAME)  at distribution level(...cloudfront.net (http://cloudfront.net/) or use own domain name)
+integrates with ACM for https, custom SSL. or use CF default certificate. Generate or import in ACM in us-east-1 for Cloudfront. Need public certificate,not self signed certificates. S3 origin handle certificates natively. ALB use ACM. EC2 or onpremise server cant use ACM. 
+
+Services integrate with ACM: ELB, CloudFront, ELB, API GW (custom domain), App Runner, EC2 connected to Nitro Enclaves, Cloudformation 
+Public CA is free but cant be applied to EC2. Private CA has monthly feel but can be directly on EC2, private access.
+Require HTTPS between viewer and Cloudfront: 1. use CF domain name xxx.cloudfront.net→ change view protocol policy(redirect HTTP to HTTPS /HTTPs only) 2. own domain (use ACM for SSL/TLS certificate)
+security policy
+download only. Upload direct to origin. No write caching.
+Behavious (by priority order): set origins, TTL, protocol , restricted viewer access (use signed URL or signed cookies, trusted signers generate),http method, lambda at edge, compression (Accept-Encoding:gzip in the header) , object caching 
+*TTL*: default TTL 24housr. Set min and max TTL. origin header: cache-control max-age, cache-control s-maxage (seonds), expires (date&time)
+invalidation on distribution (all edge locations on the distribution) --- to correct errors
+use versioned file name for regular updates, lower cost
+CloudFront can cache different versions of your content based on the values of query string parameters.
+To cache on objects using user-agent headers is not recommended as there can be many possible values and CF will forward a lot request to your origins. Use Lambda @edge to parse user agent-HTTP header and execute globally closers to users. (master lambda create at us-east-1)
+older browsers (Pre 2003) dont support SNI (allow manage SSL certs/host with a shared IP) . CF charges for dedicated IP
+CF Server Name Indication (SNI) :for custom SSL certificates, take incoming HTTP requests and redirect them to secure HTTPS requests
+OAI only work with S3 origins. Use custom headers to secure custom origins.
+S3 origin protocol only to match viewer protocol. With Custom origin, original protocol can be HTTP only , https only or match viewer. Custom origin can configure minimum SSL protocol and config ports. 
+Cloudfront security: 
+OAI for S3 origins only (for for hosting static website) -  associate with CF distribution. OAI add to S3 bucket policy. Lock S3 access only through CF
+Secure custom origin: CF requires *custom header* or custom orgin set up firewall use CF ip ranges
+private distribution : requires signed cooked /URL — on behaviour
+CloudFront key created by account root user. account as Trusted signer. The signer uses its private key to sign the URL or cookies, and CloudFront uses the public key to verify the signature. 
+
+signed URL - to one object, legacy RTMP, or client doesnt support cookies
+Signed cookies - to group of objects and you dont want to change URL
+
+CF GEO restriction: to entire distribution and whitelist/blacklist country only. Third party more customisable
+*field level encryption*: encrypt at the edge location before send to custom orgin
+504 issue:CloudFront will return an HTTP 504 status code if CF forward request to origin, traffic is blocked to the origin by a firewall or security group, or if the origin isn’t accessible on the internet.
+CloudFront Origin Groups: use origin failover to designate a primary origin for CloudFront plus a second origin that CloudFront automatically switches to when the primary origin returns specific HTTP status code failure responses.
+Use *WAF* to  monitor the HTTP and HTTPS requests that are forwarded to CloudFront. After you create an AWS WAF web access control list (web ACL), create or update a web distribution to associate the distribution with the web ACL. You can associate as many CloudFront distributions as you want with the same web ACL or with different web ACLs.
+
+To increase your cache hit ratio, you can configure your origin to add a *Cache-Control max-age* directive to your objects, and specify the longest practical value for *max-age*
+
+On *Amazon CloudFront*, you can control user access to your private content in two ways:
+
+1. Restrict access to files in CloudFront caches.
+2. Restrict access to files in your origin by doing one of the following:
+
+– Set up an origin access identity (OAI) for your Amazon S3 bucket.
+– Configure custom headers for a private HTTP server (a custom origin).
+You can secure the content in your Amazon S3 bucket so that users can access it through CloudFront but cannot access it directly by using Amazon S3 URLs. This prevents someone from bypassing CloudFront and using the Amazon S3 URL to get content that you want to restrict access to. To require that users access your content through CloudFront URLs, you do the following tasks:
+
+1. Create a special CloudFront user called an origin access identity and associate it with your CloudFront distribution.
+2. Give the origin access identity permission to read the files in your bucket.
+3. Remove permission for anyone else to use Amazon S3 URLs to read the files.
+
+If you use a custom origin, you can optionally set up custom headers to restrict access. For CloudFront to get your files from a custom origin, the files must be accessible by CloudFront using a standard HTTP (or HTTPS) request. But by using custom headers, you can further restrict access to your content so that users can access it only through CloudFront, not directly. This step isn’t required to use signed URLs, but it is recommended. To require that users access content through CloudFront, change the following settings in your CloudFront distributions:
+*Origin Custom Headers* – Configure CloudFront to forward custom headers to your origin.
+*Viewer Protocol Policy* – Configure your distribution to require viewers to use HTTPS to access CloudFront.
+*Origin Protocol Policy* – Configure your distribution to require CloudFront to use the same protocol as viewers to forward requests to the origin.
+
+*HTTPS between viewers and CloudFront*
+– You can use a certificate that was issued by a trusted certificate authority (CA) such as Comodo, DigiCert, Symantec or other third-party providers.
+– You can use a certificate provided by AWS Certificate Manager (ACM)
+*HTTPS between CloudFront and a custom origin*
+– If the origin is not an ELB load balancer, such as Amazon EC2, the certificate must be issued by a trusted CA such as Comodo, DigiCert, Symantec or other third-party providers. Not ACM
+– If your origin is an ELB load balancer, you can also use a certificate provided by ACM.
+
+ElasticCache:
+
+You can choose Memcached over Redis if you have the following requirements:
+– You need the simplest model possible.
+– You need to run large nodes with multiple cores or threads.  (Redis doesnt support multi threaded and auto discovery )
+
+– You need the ability to scale out and in, adding and removing nodes as demand on your system increases and decreases.
+– You need to cache objects, such as a database.
+
+
+App Dev services , Serverless
+
+*SQS*
+
+Visibility Timeout -  process time . Fault tolerant. If pass Visitibility timeout, if not explicitly delete, then will reappear. Set on Queque or per message (change message visibility)
+message <= 256kb. S3 link to larger data
+DLQ - for problem messages (different processing). Use redrive policy. When receivecount>maxreceiveCount and message arent deleted, then DLQ — for diagnostic and separate processing
+use separate queques for pririotisation
+1 S3 object upload→ SNS topic → several SQS queques
+short polling (immediate)/long polling (wait time seconds)
+Fifo queque must have .fifo suffix. order , and exactly once procesing 
+Standard quque - unlimited TPS , at least once delivery and best effort ordering
+Java with SQS extended client library — for large payload >256kb, interface for SQS+S3
+SQS delay queques ‘Delay second’ - message invisible first added to the queque. on Queque or per message ( not supported on FIFO) --- for delay in processing
+
+Eventbrige 
+
+— cloudwatch event v2  : can receive AWS resources state change and based on rule to trigger actions e.g Lambda
+
+*Lambda* 
+
+networking: 
+public —can access public AWS services and internet. No access to VPC based resources unless resources given public ips and security rules allow external acccess
+Inside VPC —  like EC2 in a vpc. To public services requires gateway endpoint or Nat GW and Internet GW.  each subnet+sg→1 ENI
+security: execution role  and Lambda resource policy (what services and account can invoke lambda)
+cloudwatch logs requires execution role (if nothing cw logs)
+concurrency: number of request at a time
+provisional concurrency: initialised environment
+reserved concurrency: request for one function. Each function given reserved concurrency to prevent over quota
+
+*AWS Serverless Application Model (SAM)*
+
+SAM CLI local build, test, deploy
+SAM Template specification(extension of CF) →During deployment, SAM transforms and expands SAM syntax to CF syntax--> serverless application
+
+*API Gateway*
+
+API caching: cache endpoint responses, reduce number of calls made to endpoint, improve latency . TTL for cacheing
+Websocket API: ---real time applications, use @connections api from backend to send a callback message to a connected client , get connection information or disconnect from client
+
+Security
+
+https://quip-amazon.com/UJNfAAq8yQAF
+
+Inspector
+
+Scan EC2 and OS volunerarbilities and deviation against best practice. Doesnt check AMI (config check AMI) or application. Provide security report. 
+Rules packages:
+network reachability  — no agent or agent based (give end to end )
+host assessment- required agent: *CVE, CIS benchmarks, amazon security best practice* 
+
+CloudHSM:
+
+AWS has no access to key  , fully customer managed, cant recover
+FIPS 140-2 Level 3
+use industry standard API, eg. PKCS#11, JAVA Cryptogaphy extension (JCE), Microsoft Cypto NG (CNG
+EC2 need to install cloudhsm client
+can use CloudHSM for perform SSL offloading (or use ACM with ALB)
+you can offload some of this to the HSMs in your AWS CloudHSM cluster. Offloading reduces the computational burden on your web server and provides extra security by storing the server's private key in the HSMs.
+Not HA unless deploy to multi AZ.
+No native AWS Integration: No S3-SSE
+
+KMS:  
+
+regional and public service. Keys never leave KMS (FIPS 140-2 , L2)
+CMK -  for data <=4kb, key generated by KMS (rotate every 3 years, cant disable )or imported (rotate every year)
+role separation: key policy for every CMK
+DEK: KMS generate use CMK , for data >4kb. KMS dont store DEK, 
+Grants are temporary (programatically defined using CLI)
+Grants are for allow access only
+Key policy can be both allow and deny
+*KMS Cross account access*
+Key policy needs to allow user in another account
+IAM Role must allow access to kms for user in other account
+BOTH STEPS REQUIRED otherwise it won't work
+
+Guarduty:
+
+continues threat intelligence monitoring, use AI/ML , monitoring logs (DNS logs, vpc flow logs, cloudtrail logs, S3 data event) —identify unexpected/unauthorised activities. 
+Supports multi accounts
+
+Shield- DDOS
+
+standard : L3/4 , free with Route53 and CloudFront, doesnt not include notification
+advanced:  apply to EC2, ELB, globa accelerator in addition. Financial insurances and DDOs response team.
+If you are subscribed to AWS Shield Advanced, you can register Elastic IPs (EIPs) as Protected Resources.detect quickly and mitgate faster.
+
+
+WAF: 
+
+layer 7, http/https filtering, for SQL injection, cross site scripting ,Geo block, rate awareness
+use Web access control list on ALB, API GW and CF (Not NLB)
+
+
+AWS Config 
+
+-Rules to evaluate whether AWS resources comply with common best practice (eg. checked whether EBS volume encryted, whether EC2 use approved AMIs
+- record configuration changes on resources. Audit of changes for compliance. Doenst prevent changes happen.
+AWS config for multi account: config aggregator . → sevice-linked role created→enable trust access using config
+
+ACM:
+
+regional (no cross region deploy) , public service. Public CA and Private CA, DNS  name + certificate
+Generate (automate renew) or Import certificate (you need to renew yourself)
+*ACM supports Cloudfront , ALB, API GW . Doesnt support EC2! (nor S3)
+*
+certificate cant leave the the region they were deployed.
+ACM needs to be same region as ALB. us-east-1 for CloudFront.
+ACM cert can not be downloaded, only integrate AWS CF, ALB, APIGW
+<=10 domains per ACM certificate
+It’s a best practice that you upload third party SSL certificates to AWS Certificate Manager (ACM). If you’re using certificate algorithms and key sizes that aren’t currently supported by ACM or the associated AWS resources, then you can also upload an *SSL certificate to IAM certificate store using AWS Command Line Interface (AWS CLI).*
+
+Secrete manager :
+
+For secrets (PW, API keys), supports automatic rotation , direct integration with RDS
+
+VPC flow log:
+
+only capture packet metadata (source/dest ip, port, size, protocole, action), not package content, apply to VPC, subnet and interfaces
+Not real time 
+destination: s3 or CW logs
+
+Cloudtrail: 
+
+*–is-multi-region-trail (*multi region trail)*–is-multi-region-trail and –include-global-service-events  and –include-global-service-events* (for global services like IAM, Route53, WAF and CloudFront)
+
+Macie: 
+
+scan PII data in S3
+
+Storage 
+
+*EBS 
+*
+
+General purpose - GP2 (1 GB-16TB) , GP3 
+1 IOPs( 16kb/s). GP2 IO based on volumn size, burst rate of 3000IOPS. Max GP2 baseline 16K IOPS  —good for boot volumes , low latency interactive apps, dev and test
+
+GP3 - all start from 3000 iops/125 mib/s , extra cost for up to 16k iops, cheaper and higher throughput
+Provisioned IOPs SSD - io1/2 — IOPs can be adjusted indepently of size, consistent low latency and jitter 64kIOPS per volumn. Per instance performance — with multiple volumes (io1 260k IOPS)  —for high performance, latency sensitive workloads. IO intensive No SQL and relational DBs
+HDD based st1 (througput optimised, for big data, data warehouse and log processing) and SC1 (cold)
+instance store — physically connected to one EC2 host. Instances on the host can access. Included in instance price. Highest storage performance. Have to attach at launch. Ephemeral volumns. If instance move between host(stop and starts, maintaenance) then lost data.
+EBS vs instance store: persistance, resilience, storage isolated from instance lifecycle use EBS. 
+Cheap→ STI/SCI,  Throughput,... streaming → ST1  , Boot → not ST1 or SC1
+GP2/3 <=16K iops. IO1/2<=64K IOPS, RAID0+ebs<=260k IOPS, instance Store>260kIOPs
+Amazon Data Lifecycle Manager (DLM) for EBS Snapshots provides a simple, automated way to back up data stored on Amazon EBS volumes. You can define backup and retention schedules for EBS snapshot by creating lifecycle polices on tags. 
+
+
+*S3:*
+
+Object encryption: (buckets are not encrypted, encryption at object level)
+client side: encrypted before upload to S3 endpoint. client all responsible for keys , process and tooling
+server side : S3 endpoint encrypt to storage
+SSE-C (customer provided keys, S3 manage encryption) 
+SSE-S3 (AES 256): S3 generate and manage keys and encryption. Customer just provide orignal data. You cant change keys, very little control, you cant control rotate, no role separation (full S3 admin can decrypt data)
+SSE-KMS : key USE CMK stored in KMS, — fine grain control of master key , role separation , rotation control
+
+Per object encyrption: header x-amz-server-side-encryption
+S3 notification: on a bucket level → publish event to SNS, SQS, Lambda
+S3 transfer acceleration: fast secure transfer files , utilise cloudfront. use case: centralised bucket, allow user to upload to edge location 
+S3 web hosting. — The bucket must be public
+S3 Multipart upload allows you to upload a single object as a set of parts
+S3 versioning: first version id is null, then 1,2,,
+Lifecycle policy: transition action / expire action
+S3cross region replication (bucket/object): reduce latency, disater recover, change destination ownership, automatic replication
+To determine HTTP or HTTPS requests in a bucket policy, use a condition that checks for the key "aws:SecureTransport". When this key is true, then request is sent through HTTPS. To comply with the s3-bucket-ssl-requests-only Config rule, create a bucket policy that explicitly denies access when the request meets the condition "aws:SecureTransport": "false". This policy explicitly denies access to HTTP requests.
+use S3 bucket policy allow cross account access
+Object lock:Object Lock can help prevent objects from being deleted or overwritten for a fixed amount of time or indefinitely. Two types: retention period (fixed amount of time) or legal hold (remains unless explicit remove). Object lock only worked in versioned bucket, and on per object version basis
+Glacier Vault lock: Once locked, the policy can no longer be changed. 
+S3 access point: named network endpoints that are attached to buckets that you can use to perform S3 object operations, such as GetObject and PutObject. Each access point has distinct permissions and network controls Each access point enforces a customized access point policy that works in conjunction with the bucket policy that is attached to the underlying bucket. You can configure any access point to accept requests only from a virtual private cloud (VPC) to restrict Amazon S3 data access to a private network. 
+
+
+*FSx for windows file server*:
+
+integrates with directory services or self managed AD
+accessed via SMB (EFS use NFS use linux), support file level versioning, VSS - user driven restores, use windows permission model, support DFS, , managed- no file server admin
+
+
+FSx for Lustre
+
+managed Lustre — for HPC-LINUX clients(POSIX)
+two type:
+scratch -  pure performance, short term/temp workloads. No HA. large file systemr more chance of failure
+Persistant: HA in one AZ, autoheals in one AZ
+Back up to S3
+
+*EFS*
+
+Shared between many EC2 instances
+on NFSV4, mounted to LInux
+privtate service — mount target (ENI) in a VPC
+can be access from on premise — vpn/dx
+Access via Lambda (vpc mode)
+
+storage class: standard and IA, can use lifecycle policies
+throughput: bursting and provisioned
+
+Management :
+
+SCP for organisation :
+
+SCPs specify the maximum permissions for an organization, organizational unit (OU), or account
+SCPs alone are not sufficient to granting permissions to the accounts in your organization. No permissions are granted by an SCP. An SCP defines a guardrail, or sets limits, on the actions that the account's administrator can delegate to the IAM users and roles in the affected accounts. The effective permissions (https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_scps.html#scp-effects-on-permissions) are the logical intersection between what is allowed by the SCP and what is allowed by the IAM and resource-based policies.
+SCP doesnt affect accounts out of your organisation.
+SCPs don't affect users or roles in the management account. They affect only the member accounts in your organization.
+SCPs DO NOT affect any service-linked role. Service-linked roles enable other AWS services to integrate with AWS Organizations and can’t be restricted by SCPs.
+AWS strongly recommends that you don’t attach SCPs to the root of your organization without thoroughly testing the impact that the policy has on accounts. Instead, create an OU that you can move your accounts into one at a time, or at least in small numbers, to ensure that you don’t inadvertently lock users out of key services.
+ SCPs are available only in an organization that has all features enabled. SCPs aren’t available if your organization has enabled only the consolidated billing features.
+
+Patch Manager:
+
+patch baseline: rules -->aws -RunPatchBaseline (at maintenance window---time and task) to tagged instances or patch group (way of organising instances for patching based on OS, environment, patch group must have tag key of Patch Group)→register to Patch baseline
+AWS-DefaultPatchBaseline baseline is primarily used to approve all Windows Server operating system patches 
+uses two Patch Groups, non-overlapping maintenance windows to ensure that the EC2 instance reboots do not occur at the same time.
+
+System manager 
+
+automation:
+runbook: - include steps to restart EC2 or create AMI, each step defines an action
+System manager SSM must install agent on EC2 and on premise servers. For on premise server: need IAM service role
+
+Run command: no SSH/RDP
+
+state manager:configure your instances to boot with a specific software at start-up; download and update agents on a defined schedule; configure network settings and many others, but not the patching of your EC2 instances.
+
+Organisation:
+
+All accounts in the organization can receive the hourly cost-benefit of Reserved Instances that are purchased by any other account. In the payer account, you can turn off Reserved Instance discount sharing on the Preferences page on the Billing and Cost Management console.
+The master account of an organization can turn off Reserved Instance (RI) sharing for member accounts in that organization. This means that Reserved Instances are not shared between that member account and other member accounts. 
+
+Monitor important changes to organisation: cloudtrail →Lambda function→ Cloudwatch event rule →SNS 
+
+one account can join one organisation.  If you want the master account to have full administrative control over an invited member account, you must create the  OrganizationAccountAccessRole IAM role in the member account and grant permission to the master account to assume the role.
+
+
+Cloudwatch:
+
+unified cloudwatch agent: collect both logs and advanced metrics
+Logs insights: search and analyze,perform queries
+
+
+Tag Editor :
+
+To add tags to—or edit or delete tags of—multiple resources at once, use Tag Editor. With Tag Editor, you search for the resources that you want to tag, and then manage tags for the resources in your search results.
+
+
+Identities and federation:
+
+*Directory services -managed Microsoft AD
+*
+
+fully managed service, same tools as stanadard AD, native schema extension, support sharepoint, SQL server, DFS
+after setup a trust , you can integrate SSO to AWS and windows-based workload
+HA (2DC) automatic patching and maintainance
+if on premise fail, aws directory still operate independently
+
+support Radius-based MFA
+Best choice for more than 5k users and need trust relationship between AWS and on premise
+for long term hybrid networking
+identity federation with Azure AD /microsoft 365
+
+
+*AD connector*
+
+If dont want to directory data in AWS, then AD directory. All redirected
+use existing on-premise AD with aws services.
+for poc
+requires working networking connection , risk for larger deployment
+
+
+User Identity Provider:
+
+When you use an IAM identity provider, you don't have to create custom sign-in code or manage your own user identities. To use an IdP, you create an IAM identity provider entity to establish a trust relationship between your AWS account and the IdP. IAM supports IdPs that are compatible with OpenID Connect (OIDC) (http://openid.net/connect/) or SAML 2.0 (Security Assertion Markup Language 2.0 (https://wiki.oasis-open.org/security). IAM support web identity provider (FB, Google, Amazon...) They can receive an authentication token, and then exchange that token for temporary security credentials in AWS that map to an IAM role with permissions to use the resources in your AWS account. 
+with SAML 2.0  IDP — users/groups map to IAM role, Role trust policy need to have SAML provider as the principal. can use Condition to allow users match certail SAML attributes
+
+STS: 
+
+a global web service that enables you to request temporary, limited-privilege credentials for AWS Identity and Access Management (IAM) users or for users you authenticate (federated users). all AWS STS requests go to a single endpoint at https://sts.amazonaws.com. Global requests map to the US East (N. Virginia) Region. AWS recommends using Regional AWS STS endpoints.use  * AssumeRoleWithWebIdentity* **  to trade the authentication token you get from those web identity IdPs for AWS temporary security credentials
+
+Cognito:
+
+The two main components of Amazon Cognito are user pools and identity pools. User pools are user directories that provide sign-up and sign-in options for your app users. Identity pools enable you to grant your users access to other AWS services. You can use identity pools and user pools separately or together. *Amazon Cognito identity pools* provide temporary AWS credentials for users who are guests (unauthenticated) and for users who have been authenticated and have received a token. Once you’ve created an OpenID Connect provider in the IAM Console, you can associate it with an identity pool.
+
+
+
+*IAM:*
+
+Use IAM as a certificate manager only when you must support HTTPS connections in a Region that is not supported by ACM (https://docs.aws.amazon.com/general/latest/gr/acm.html). 
+IAM policy applies to users, groups and Roles. Vs SCP applies to AWS accounts, or group of account in an OU (impacts all users, roles in the account, inclding the root account identity)
+Resource based policy:  cross-account share access to resources, share with account ids. With a resource that is accessed through a resource-based policy, the user still works in the trusted account and does not have to give up his or her user permissions in place of the role permissions.
+service-linked role: an IAM role linked to an aws service
+Cross-account role: the trusting account create a role (trusted entity as another AWS account) and specify another another account as trusted entity
+
+To delegate permission to access a resource, you create an IAM role in the trusting account that has *two policies attached:*
+The *permissions policy* grants the user of the role the needed permissions to carry out the intended tasks on the resource.
+The *trust policy* specifies which trusted account members are allowed to assume the role.
+To successfully revoke IAM session permissions from a role, you must have the PutRolePolicy permission for the role. This allows you to attach the AWSRevokeOlderSessions inline policy to the role. 
+
+
+Infrastructure as code
+
+Cloudformation
+
+template parameter: accpet input from console or API or CLI
+Intrinsic function and mapping —> improve template portability 
+output: accessible from parent stack when use neting . Can be exported , allow cross stack reference
+Conditions : stacks changes based on conditions (true/false) eg environement Prod/dev—? size of instance
+DependsOn: explicilit dependency relationship eg. Elastic ip create after IGW complete
+Signal:  wait for number of success signals
+ref (reference a parameter in the CF template)  VS dynamic reference (for exteral store parameter store and secrete manager)
+Fn::GetAtt intrinsic function returns the value of an attribute from a resource in the template
+ref returns default physical id of a resource or parameter, GetAtt returns some properties of logical resource
+Resource in a single stack shares same life cycle
+Nested stack vs Cross-stack reference: nested (reuse template in other stacks, not reused resource, everything life cycle linked, make installation process faster) ; Cross-stack reference (reuse stack resource, reduce cost, different lifecycle)
+Stacksets: Deploy CF stack to multiple account /regions. Stacksets In an admin account. Each stack = 1 region in 1 account. Role : self managed IAM role/ service managemed (with organisation)
+Deletion policy: only for delete not replace. Delete, retain, snapshot . 
+Stack role: allows role seperate, use stack role to create /delete stack without permission to the resources
+CFN- Init:  part of user data, define what desired state
+CFN-hup - detect change in the template→ call CFN-init—>update EC2 config
+CFN changeset - preview changes, for multi different version
+CFN custom resources - for resources doent natively support, send an invite to (eg. Lamba) and get data back from something
+
+OpsWorks: 
+
+from on premise chef/puppet to aws, receipes/cookbook/manifest
+stacks (collection of instances with a common purpose, eg. PHP applications)—  made of >=1 layers (specific function, eg. LB, application servers, DBs). You cannot configure an instance directly, except for some basic settings such as the SSH key and hostname. You must create and configure an appropriate layer, and add the instance to the layer.
+cookbook/receipe - apply to all instances in the layers. cookbook can be stored in Github.
+instances (EC2/onpremise) - 24/7, time based, or load based
+Blue/Green stacks use Route53 weighted routing policy
+By default, AWS OpsWorks Stacks automatically installs the latest updates during setup, after an instance finishes booting. AWS OpsWorks Stacks does not automatically install updates after an instance is online, to avoid interruptions such as restarting application servers. Instead, you manage updates to your online instances yourself, so you can minimize any disruptions.
+AWS recommends that you use one of the following to update your online instances:
+*– Create and start new instances to replace your current online instances. Then delete the current instances. The new instances will have the latest set of security patches installed during setup.*
+*– On Linux-based instances in Chef 11.10 or older stacks, run the Update Dependencies stack command, which installs the current set of security patches and other updates on the specified instances.*
+
+Containers:
+
+ECS: 
+
+Tasks definitions: launch type (EC2/Fargate/everywhere), IAM task role (ECS task definition or RunTask API operation), networking mode, volumes, container definition, task placement constraints
+EC2 networking mode: awsvpc(each task with an ENI and private IPV4 address, can use SG and security monitoring tool, such as VPC flow logs on tasks), Host( not recommended, You can’t run more than a single instantiation of a task on each host.), Bridge(use Docker builtin virtual network inside each container, allows containers on the same bridge network to communicate each other, provides isolation boundary from containers not on the same bridge network,cant add SG), none(no external network connectivity)
+Fargate networking: default each task with an ENI
+placement constraints: —only include or exclude certain EC2 instances. distinctInstance and member of attributes (AZs, instance types...)
+Placement strategies: spread(spread across AZs, max availability), random and Binpack(on few instances as possible, optimise resource utilisation)
+*Amazon ECS Exec* is a way for customers to execute commands in a container running on Amazon EC2 instances or AWS Fargate. ECS Exec gives you interactive shell or single command access to a running container.
+Service scheduler (for long running services): scheduling stragtey: Replica (maintain number of tasks across cluster)and Daemon(one task per instance)
+ECS service: maintain number of tasks in your service . Also run service behind an ELB
+Deployment strategies in ECS: rolling update, Blue/green deployment with AWS CodeDeploy
+Service load balancer: The Classic Load Balancer doesn’t allow you to run multiple copies of a task on the same instance. You must statically map port numbers on a container instance. However, an Application Load Balancer uses *dynamic port mapping*, so you can run multiple tasks from a single service on the same container instance.
+Services with tasks that use the awsvpc network mode, such as those with the Fargate launch type, do not support Classic Load Balancers. You must use NLB instead for TCP
+Fargate task storage is ephermeral. If fargate task stops, the storage is deleted. ECS tasks on EC2 and Fargate can mount to EFS
+EC2 Tasks data volumns: EFS, FSx for Windows server, Docker volume (a docker managed local volume) , Bind Mounts (A file or directory on the host, such as an Amazon EC2 instance or AWS Fargate, is mounted into a container)
+ECS monitoring: Logs→ CW logs(Share log files between accounts, monitor CloudTrail log files in real time by sending them to CloudWatch Logs.), CW alarms
+
+Amazon ECS enables you to inject sensitive data into your containers by storing your sensitive data in either AWS Secrets Manager secrets or AWS Systems Manager Parameter Store parameters and then referencing them in your container definition. 
+Secrets can be exposed to a container in the following ways:
+
+
+*  
+    To inject sensitive data into your containers as environment variables, use the secrets container definition parameter. 
+*  
+    To reference sensitive information in the log configuration of a container, use the secretOptions container definition parameter. 
+
+valueFrom (in the task definition)
+
+
+The secret to expose to the container. The supported values are either the full ARN of the AWS Secrets Manager secret or the full ARN of the parameter in the AWS Systems Manager Parameter Store. 
+
+Deployment services:
+
+https://quip-amazon.com/9WW6AmC0fzVG
+
+*service catalog*: 
+
+regional service
+Admin define products and permission. End user launch products
+have Cloudformation templates in Service catalog and assign permissions to IAM roles
+
+*CI/CD tools*:
+
+CodeBuild :  Buildspec.yml, in root of source
+CodeDeploy: appspec.yml/json  , Deploy to EC2 and onpremise requires to agent
+
+config+lifecycle event hooks
+CodeCommit:  can trigger SNS or lambda
+CodePipeline:  Glue source, Build and Deploy. State ( include manual approval) change can send eventbridge event
+
+Elastic Beanstalk: 
+
+allows developers focus on code.
+Requires app change - doesnt come free. Use Docker for anything unsupported
+Databases out of ElasticBeanstalk, so not lose data. 
+Decouple RDS from ElasticBeanstalk environment: take snapshot→ enable delete protection→new EB env→ swap env→delete failed stack, retain stuck source(DB)
+Deployment policies: all at once, Rolling (loss capacity), rolling with additional batch (extra cost), immutable (launch a full set of new instances running the new version in a separate Auto Scaling group, alongside the instances running the old version), traffic spliting(A/B testing), Blue/green (CName swap)
+supports languages such as Go, Java, .net and web containers such as Tomcat + Docker
+
+
+Analytics:
+
+*EMR:*
+
+Spot instance for task ondes, for master and core node use on demands
+
+Kinesis:
+
+Kinesis Client librar (https://docs.aws.amazon.com/streams/latest/dev/shared-throughput-kcl-consumers.html)y ( one of the method of developing custom consumer application to process data from Kinesis data stream)
+Kinesis: producer library and client library
+
+Others:
+
+*Data transfer cost*: 
+
+(charged) https://aws.amazon.com/blogs/architecture/overview-of-data-transfer-costs-for-common-architectures/
+AWS to internet, To AWS public services in the same region (no transfer cost use IGW, cost on NAT GW),  to aws public service in another region
+cost for cross region and cross AZ. No data transfer cost for same AZ, reduce multi az cost on RDS enable standy multi AZ
+vpc peering no data transfer cost
+
+Workspaces: 
+
+desktop as a servcie for homeworking/office, windows (FSX)/linux. monthly /hourly pricing(+base infrastructure cost), include bandwith
+uses directory services (simple, ad, ad connector)
+use an ENI in an VPC, VPC networking (use NAT GW and IGW for internet)
+Not HA, in single subnet, subject to AZ failure
+
+Transcribe: 
+
+speech to text
+
+Disaster Recovery strategies: 
+
+RT0: Max accepted restoring service time
+RP0: max data loss time 
+
+Backup and restore: RTO <=24hours, RPO hours
+Pilot light: only DB and object storage in backup site. Application servers are off→RTO hours, RPO—mins
+Warm standby:business critical systems are fully duplicated and on but scaled down fleet. —RTO-mins, RPO-seconds
+active-active —workload active from multi regions - RTO. RPO close to 0
+
+Amazon MQ :
+
+for migrating applications from existing message brokers that rely on compatibility with APIs such as JMS or protocols such as AMQP, MQTT, OpenWire, and STOMP.
+
+Elastic Transcoder : It is designed to be a highly scalable, easy to use and a cost effective way for developers and businesses to convert (or “transcode”) media files from their source format into versions that will playback on devices like smartphones, tablets and PCs.
+
+
+
+
+
+
+
+
+
