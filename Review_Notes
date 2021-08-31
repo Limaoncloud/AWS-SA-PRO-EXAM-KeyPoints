@@ -194,7 +194,6 @@ Aurora have singer reader endpoint for read replicas. RDS doesnt support
 
 *Migration:*
 
-https://quip-amazon.com/oeJ4A4QE1Xdd
 
 Application Discover service: 
 
@@ -450,7 +449,7 @@ Websocket API: ---real time applications, use @connections api from backend to s
 
 Security
 
-https://quip-amazon.com/UJNfAAq8yQAF
+
 
 Inspector
 
@@ -777,7 +776,6 @@ The secret to expose to the container. The supported values are either the full 
 
 Deployment services:
 
-https://quip-amazon.com/9WW6AmC0fzVG
 
 *service catalog*: 
 
