@@ -1,0 +1,5 @@
+# AWS-SA-PRO-EXAM-KeyPoints
+I tried to summarised as much as exam key points based on Cantril training and practice tests. However due to the width of the exam, there could be more to be added. 
+I used Cantril course for foundational learning. It helps me understand each service. But downside is it is very long and I feel I forgot most of it after I complete the course. I think it would be more efficient if I did some small quizzes on the topics in the middle or do couple of practice test in the middle of learning to find out gaps. 
+I spent 2 weeks on practice tests on 1 Cantril test and 3 DoJo tests. Initially I used time mode which was not efficient as I have to read all the questions again during review. Review mode works better for me. I also start to summarise important points into a document and review them the day before exam. You can find it here. It is not complete but covers at least quite a bit of exam points. 
+Unlike the others, I have never passed any of the practices test. My score was late 60s to early 70s. So I had low expectation to the exam.
